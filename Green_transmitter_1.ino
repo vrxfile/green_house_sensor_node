@@ -1,6 +1,7 @@
 #include <VirtualWire.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Sleep_n0m1.h>
 
 #define trx_gnd_pin 2
 #define trx_vcc_pin 4
@@ -20,11 +21,15 @@ DallasTemperature ds_sensor(&oneWire);
 
 #define MY_ADDR 0x01
 
+#define SEND_INTERVAL 55000
+
 #define BUFF_SIZE 32
 char buf1[BUFF_SIZE] = {0};
 char buf2[BUFF_SIZE] = {0};
 char str_tmp1[8] = {0};
 char str_tmp2[8] = {0};
+
+Sleep sleep;
 
 void setup()
 {
@@ -70,16 +75,19 @@ void loop()
   Serial.println("Measuring...");
 
   // Measure moisture sensor
-  digitalWrite(m_vcc_pin, HIGH); delay(128);
+  digitalWrite(m_vcc_pin, HIGH); delay(250);
   float m = analogRead(m_sig_pin) / 1023.0 * 100.0;
-  digitalWrite(m_vcc_pin, LOW);  delay(128);
+  digitalWrite(m_vcc_pin, LOW);
   Serial.print("Moisture: ");
   Serial.print(m);
   Serial.println(" %");
 
   // Measure DS18B20 sensor
+  digitalWrite(t_vcc_pin, HIGH); delay(250);
+  ds_sensor.begin();
   ds_sensor.requestTemperatures();
   float t = ds_sensor.getTempCByIndex(0);
+  digitalWrite(t_vcc_pin, LOW);
   Serial.print("Temperature: ");
   Serial.print(t);
   Serial.println(" *C");
@@ -88,7 +96,6 @@ void loop()
   // Preparing network packet in JSON format
   dtostrf(m, 3, 1, str_tmp1);
   dtostrf(t, 3, 1, str_tmp2);
-  //sprintf(buf1, "{\"A\":%d,\"M\":%s,\"T\":%s}\n", MY_ADDR, str_tmp1,  str_tmp2);
   sprintf(buf1, "{\"A\":%d,\"M\":%s}\n", MY_ADDR, str_tmp1);
   sprintf(buf2, "{\"A\":%d,\"T\":%s}\n", MY_ADDR, str_tmp2);
   Serial.print("JSON1 length: ");
@@ -104,14 +111,19 @@ void loop()
 
   // Sending data to server
   digitalWrite(led_pin, HIGH);
+  digitalWrite(trx_vcc_pin, HIGH); delay(250);
   vw_send((uint8_t *)buf1, strlen(buf1));
   vw_wait_tx();
   vw_send((uint8_t *)buf2, strlen(buf2));
   vw_wait_tx();
+  digitalWrite(trx_vcc_pin, LOW);
   digitalWrite(led_pin, LOW);
 
   Serial.println("Data sent OK!");
   Serial.println();
 
-  delay(5000);
+  // Sleep mode
+  delay(250);
+  sleep.pwrDownMode();
+  sleep.sleepDelay(SEND_INTERVAL);
 }
