@@ -3,9 +3,11 @@
 #include <DallasTemperature.h>
 #include <Sleep_n0m1.h>
 
-#define trx_gnd_pin 2
-#define trx_vcc_pin 4
+#define trx_gnd_pin  2
+#define trx_vcc_pin  4
 #define transmit_pin 3
+#define receive_pin  6
+#define ptt_pin      7
 
 #define m_gnd_pin A1
 #define m_vcc_pin A2
@@ -21,7 +23,9 @@ DallasTemperature ds_sensor(&oneWire);
 
 #define MY_ADDR 0x01
 
-#define SEND_INTERVAL 55000
+#define SEND_INTERVAL 131000
+
+#define MAX_COUNT_SEND 10
 
 #define BUFF_SIZE 32
 char buf1[BUFF_SIZE] = {0};
@@ -42,18 +46,21 @@ void setup()
   digitalWrite(trx_gnd_pin, LOW);
   pinMode(trx_vcc_pin, OUTPUT);
   digitalWrite(trx_vcc_pin, HIGH);
+  delay(250);
 
   // Init power for moisture sensor
   pinMode(m_gnd_pin, OUTPUT);
   digitalWrite(m_gnd_pin, LOW);
   pinMode(m_vcc_pin, OUTPUT);
   digitalWrite(m_vcc_pin, LOW);
+  delay(250);
 
   // Init power for DS18B20 sensor
   pinMode(t_gnd_pin, OUTPUT);
   digitalWrite(t_gnd_pin, LOW);
   pinMode(t_vcc_pin, OUTPUT);
   digitalWrite(t_vcc_pin, HIGH);
+  delay(250);
 
   // Init DS18B20 sensor
   ds_sensor.begin();
@@ -67,20 +74,14 @@ void setup()
 
   // Init transmitter
   vw_set_tx_pin(transmit_pin);
-  vw_setup(1024);
+  vw_set_rx_pin(receive_pin);
+  vw_set_ptt_pin(ptt_pin);
+  vw_setup(512);
 }
 
 void loop()
 {
   Serial.println("Measuring...");
-
-  // Measure moisture sensor
-  digitalWrite(m_vcc_pin, HIGH); delay(250);
-  float m = analogRead(m_sig_pin) / 1023.0 * 100.0;
-  digitalWrite(m_vcc_pin, LOW);
-  Serial.print("Moisture: ");
-  Serial.print(m);
-  Serial.println(" %");
 
   // Measure DS18B20 sensor
   digitalWrite(t_vcc_pin, HIGH); delay(250);
@@ -91,6 +92,15 @@ void loop()
   Serial.print("Temperature: ");
   Serial.print(t);
   Serial.println(" *C");
+
+  // Measure moisture sensor
+  digitalWrite(m_vcc_pin, HIGH); delay(250);
+  float m = analogRead(m_sig_pin) / 1023.0 * 100.0;
+  digitalWrite(m_vcc_pin, LOW);
+  Serial.print("Moisture: ");
+  Serial.print(m);
+  Serial.println(" %");
+
   Serial.println();
 
   // Preparing network packet in JSON format
@@ -112,10 +122,17 @@ void loop()
   // Sending data to server
   digitalWrite(led_pin, HIGH);
   digitalWrite(trx_vcc_pin, HIGH); delay(250);
-  vw_send((uint8_t *)buf1, strlen(buf1));
-  vw_wait_tx();
-  vw_send((uint8_t *)buf2, strlen(buf2));
-  vw_wait_tx();
+  for (int u = 0; u < MAX_COUNT_SEND; u++)
+  {
+    vw_send((uint8_t *)buf1, strlen(buf1));
+    vw_wait_tx();
+    delay(250);
+    Serial.println("Sent 1st packet");
+    vw_send((uint8_t *)buf2, strlen(buf2));
+    vw_wait_tx();
+    delay(250);
+    Serial.println("Sent 2nd packet");
+  }
   digitalWrite(trx_vcc_pin, LOW);
   digitalWrite(led_pin, LOW);
 
